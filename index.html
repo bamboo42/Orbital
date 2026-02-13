@@ -100,6 +100,21 @@ const sfxLevelUp=createSoundPool('Sounds/level_up.wav',2);
 const sfxRepair=createSoundPool('Sounds/repair.mp3',3);
 const sfxDfDestroyed=createSoundPool('Sounds/df_ship_destroyed.wav',2);
 function fadeOutAudio(a,dur){if(!a)return;const step=50,dec=a.volume/(dur/step);const iv=setInterval(()=>{a.volume=Math.max(0,a.volume-dec);if(a.volume<=0){clearInterval(iv);a.pause();a.currentTime=0}},step)}
+/* ===== ENGINE SOUNDS ===== */
+const engineSnd=createLoopAudio('Sounds/engines_main.wav');_allAudioEls.push(engineSnd);
+let engineWasThrusting=false;
+function stopEngineSounds(){engineSnd.pause();engineSnd.currentTime=0;engineSnd.volume=0;engineWasThrusting=false}
+function updateEngineSounds(){
+  if(!ship.alive){if(engineWasThrusting)stopEngineSounds();return}
+  const thrusting=ship.thrusting;
+  if(thrusting){
+    if(!engineWasThrusting){engineSnd.volume=Math.min(1,0.03*masterVolume);engineSnd.play().catch(()=>{})}
+    engineSnd.volume=Math.min(1,0.03*masterVolume);
+  }else{
+    if(engineWasThrusting){engineSnd.pause();engineSnd.currentTime=0}
+  }
+  engineWasThrusting=thrusting;
+}
 
 const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const killsEl=document.getElementById('kills'),livesElHud=document.getElementById('livesEl');
@@ -118,7 +133,7 @@ const volSlider=document.getElementById('volSlider'),volPct=document.getElementB
 volSlider.value=Math.round(masterVolume*100);volPct.textContent=volSlider.value+'%';
 volSlider.addEventListener('input',()=>{masterVolume=volSlider.value/100;volPct.textContent=volSlider.value+'%';localStorage.setItem('orbitalMasterVol',masterVolume)});
 pauseOverlay.addEventListener('mousedown',e=>e.stopPropagation());pauseOverlay.addEventListener('mouseup',e=>e.stopPropagation());pauseOverlay.addEventListener('click',e=>e.stopPropagation());
-function pauseGame(){if(gamePaused)return;manualPause=true;gamePaused=true;mouse.down=false;pauseOverlay.classList.add('active')}
+function pauseGame(){if(gamePaused)return;manualPause=true;gamePaused=true;mouse.down=false;stopEngineSounds();pauseOverlay.classList.add('active')}
 function resumeGame(){if(!manualPause)return;manualPause=false;gamePaused=false;pauseOverlay.classList.remove('active')}
 function calcScore(){return(((playerLevel-1)*5)+(kills*10))*Math.max(lives,1)}
 function updateScoreDisplay(){scoreLiveEl.textContent=calcScore()}
@@ -243,7 +258,7 @@ function loadGameState(){
 
 function triggerDogfight(tier){
   gamePaused=true;
-  mouse.down=false;
+  mouse.down=false;stopEngineSounds();
   sessionStorage.setItem('dogfightTier',JSON.stringify(tier));
   bossAlertEl.textContent='⚠ ENTERING DOGFIGHT ⚠';
   bossAlertEl.style.color='#ff2222';
@@ -280,7 +295,7 @@ let fbTokenTimer=0;const FB_TOKEN_INTERVAL=2100;
 function spawnLifeToken(wx,wy){lifeTokens.push({x:wx,y:wy,life:TOKEN_LIFE})}
 function spawnFBToken(){const lim=MAP_RADIUS-BELT_WIDTH/2-80;const a=Math.random()*Math.PI*2,r=200+Math.random()*(lim-200);let tx=Math.cos(a)*r,ty=Math.sin(a)*r;let safe=true;for(const b of bodyPositions){if(dist(tx,ty,b.x,b.y)<b.r+60){safe=false;break}}if(!safe){tx=ship.x+(Math.random()-0.5)*400;ty=ship.y+(Math.random()-0.5)*400}spawnLifeToken(tx,ty)}
 function updateLifeTokens(){if(finalBossPhase&&finalBoss&&finalBoss.alive){fbTokenTimer--;if(fbTokenTimer<=0){fbTokenTimer=FB_TOKEN_INTERVAL;spawnFBToken()}}for(let i=lifeTokens.length-1;i>=0;i--){const tk=lifeTokens[i];tk.life--;if(tk.life<=0){lifeTokens.splice(i,1);continue}if(ship.alive&&dist(ship.x,ship.y,tk.x,tk.y)<ship.size+TOKEN_SIZE){ship.hp=getMaxHp();spawnExplosion(tk.x,tk.y,15,'#44ff88');spawnExplosion(tk.x,tk.y,10,'#ffffff');sfxRepair(0.384);lifeTokens.splice(i,1)}}}
-function drawLifeTokens(){const now=Date.now();for(const tk of lifeTokens){const sx=tk.x-camera.x+canvas.width/2,sy=tk.y-camera.y+canvas.height/2,pulse=0.5+Math.sin(now*0.006)*0.5,scalePulse=0.85+pulse*0.15,fade=tk.life<180?tk.life/180:1;const g=ctx.createRadialGradient(sx,sy,0,sx,sy,TOKEN_SIZE*3);g.addColorStop(0,`rgba(80,255,150,${0.3*pulse*fade})`);g.addColorStop(1,'transparent');ctx.beginPath();ctx.arc(sx,sy,TOKEN_SIZE*3,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();ctx.save();ctx.translate(sx,sy);ctx.rotate(now*0.002);ctx.beginPath();ctx.arc(0,0,TOKEN_SIZE*1.3*scalePulse,0,Math.PI*2);ctx.strokeStyle=`rgba(80,255,150,${0.4*pulse*fade})`;ctx.lineWidth=2;ctx.stroke();ctx.restore();const bg=ctx.createRadialGradient(sx,sy,0,sx,sy,TOKEN_SIZE*scalePulse);bg.addColorStop(0,`rgba(200,255,220,${fade})`);bg.addColorStop(0.5,`rgba(80,255,150,${0.8*fade})`);bg.addColorStop(1,`rgba(40,200,100,${0.4*fade})`);ctx.beginPath();ctx.arc(sx,sy,TOKEN_SIZE*scalePulse,0,Math.PI*2);ctx.fillStyle=bg;ctx.fill();ctx.save();ctx.translate(sx,sy);ctx.fillStyle=`rgba(255,255,255,${(0.6+pulse*0.4)*fade})`;ctx.font=`${TOKEN_SIZE*0.9}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🔧',0,1);ctx.restore()}}
+function drawLifeTokens(){const now=Date.now();for(const tk of lifeTokens){const sx=tk.x-camera.x+canvas.width/2,sy=tk.y-camera.y+canvas.height/2,pulse=0.5+Math.sin(now*0.006)*0.5,scalePulse=0.85+pulse*0.15,fade=tk.life<180?tk.life/180:1;const g=ctx.createRadialGradient(sx,sy,0,sx,sy,TOKEN_SIZE*3);g.addColorStop(0,`rgba(80,255,150,${0.3*pulse*fade})`);g.addColorStop(1,'transparent');ctx.beginPath();ctx.arc(sx,sy,TOKEN_SIZE*3,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();ctx.save();ctx.translate(sx,sy);ctx.rotate(now*0.002);ctx.beginPath();ctx.arc(0,0,TOKEN_SIZE*1.3*scalePulse,0,Math.PI*2);ctx.strokeStyle=`rgba(80,255,150,${0.4*pulse*fade})`;ctx.lineWidth=2;ctx.stroke();ctx.restore();const bg=ctx.createRadialGradient(sx,sy,0,sx,sy,TOKEN_SIZE*scalePulse);bg.addColorStop(0,`rgba(200,255,220,${0.5*fade})`);bg.addColorStop(0.5,`rgba(80,255,150,${0.4*fade})`);bg.addColorStop(1,`rgba(40,200,100,${0.2*fade})`);ctx.beginPath();ctx.arc(sx,sy,TOKEN_SIZE*scalePulse,0,Math.PI*2);ctx.fillStyle=bg;ctx.fill();ctx.save();ctx.translate(sx,sy);ctx.fillStyle=`rgba(255,255,255,${(0.6+pulse*0.4)*fade})`;ctx.font=`${TOKEN_SIZE*0.9}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🔧',0,1);ctx.restore()}}
 
 const projectiles=[],enemyProjectiles=[];
 const PROJ_SPEED=9,PROJ_LIFE=120,EPROJ_SPEED=5.5,EPROJ_LIFE=150;
@@ -510,7 +525,7 @@ function spawnBossDebris(bx,by){
 function updateBossDebris(){for(let i=bossDebris.length-1;i>=0;i--){const d=bossDebris[i];d.x+=d.vx;d.y+=d.vy;d.angle+=d.angVel;d.vx*=0.997;d.vy*=0.997;d.life-=d.decay;if(d.life<=0)bossDebris.splice(i,1)}}
 function drawBossDebris(){for(const d of bossDebris){const sx=d.x-camera.x+canvas.width/2,sy=d.y-camera.y+canvas.height/2;ctx.save();ctx.translate(sx,sy);ctx.rotate(d.angle);ctx.globalAlpha=d.life;ctx.beginPath();ctx.moveTo(d.verts[0].x,d.verts[0].y);for(let v=1;v<d.verts.length;v++)ctx.lineTo(d.verts[v].x,d.verts[v].y);ctx.closePath();ctx.fillStyle=d.color;ctx.fill();ctx.strokeStyle='rgba(255,80,80,0.4)';ctx.lineWidth=1;ctx.stroke();const glow=ctx.createRadialGradient(0,0,0,0,0,20);glow.addColorStop(0,`rgba(255,60,20,${0.15*d.life})`);glow.addColorStop(1,'transparent');ctx.beginPath();ctx.arc(0,0,20,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();ctx.globalAlpha=1;ctx.restore()}}
 
-function showWinScreen(){gamePaused=true;for(const bh of blackHoles)stopBHSound(bh);const s=calcScore();
+function showWinScreen(){gamePaused=true;stopEngineSounds();for(const bh of blackHoles)stopBHSound(bh);const s=calcScore();
   const lines=[`Kills: ${kills}`,`Level: ${playerLevel}`,`Deaths: ${deaths}`,`Lives remaining: ${lives} (x${lives} multiplier)`];
   let html=lines.map(l=>`<div class="stat-line">${l}</div>`).join('');
   html+=`<div class="stat-line" style="margin-top:12px"><span class="score-slam" style="color:rgba(200,255,220,0.9);font-size:24px;text-shadow:0 0 30px rgba(80,255,130,0.6)">SCORE: ${s}</span></div>`;
@@ -561,13 +576,13 @@ ctx.beginPath();ctx.ellipse(s*0.35,0,s*0.18,s*0.12,0,0,Math.PI*2);const cg=ctx.c
   if(upgrades.shields>0&&!ship.shieldActive){const sBarW=28,sBarH=2,sBarY=barY-(getMaxHp()>0?14:8);ctx.fillStyle='rgba(255,255,255,0.08)';ctx.fillRect(sx-sBarW/2,sBarY,sBarW,sBarH);ctx.fillStyle='rgba(80,180,255,0.5)';ctx.fillRect(sx-sBarW/2,sBarY,sBarW*(1-ship.shieldTimer/getShieldRecharge()),sBarH)}
   const pBarW=28,pBarH=3;let stackY=barY-8;if(getMaxHp()>0)stackY-=6;if(upgrades.shields>0&&!ship.shieldActive)stackY-=6;stackY-=6;const pcd=getPulseCooldown();if(pulseCooldown>0){ctx.fillStyle='rgba(255,255,255,0.08)';ctx.fillRect(sx-pBarW/2,stackY,pBarW,pBarH);ctx.fillStyle='rgba(150,120,255,0.6)';ctx.fillRect(sx-pBarW/2,stackY,pBarW*(1-pulseCooldown/pcd),pBarH)}else{ctx.fillStyle=`rgba(150,120,255,${0.4+Math.sin(Date.now()*0.005)*0.3})`;ctx.fillRect(sx-pBarW/2,stackY,pBarW,pBarH)}}
 
-function destroyShip(){ship.alive=false;ship.respawnTimer=RESPAWN_FRAMES;ship.vx=0;ship.vy=0;deaths++;lives--;livesElHud.textContent=lives;spawnExplosion(ship.x,ship.y,30,'#ff6644');spawnExplosion(ship.x,ship.y,15,'#ffcc44');sfxMedBoom(1);if(lives<=0)setTimeout(showGameOver,1500)}
+function destroyShip(){ship.alive=false;ship.respawnTimer=RESPAWN_FRAMES;ship.vx=0;ship.vy=0;stopEngineSounds();deaths++;lives--;livesElHud.textContent=lives;spawnExplosion(ship.x,ship.y,30,'#ff6644');spawnExplosion(ship.x,ship.y,15,'#ffcc44');sfxMedBoom(1);if(lives<=0)setTimeout(showGameOver,1500)}
 function respawnShip(){if(lives<=0)return;const pos=findSafeSpawn(0,0,300,600);ship.x=pos.x;ship.y=pos.y;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.hp=getMaxHp();if(upgrades.shields>0){ship.shieldActive=true;ship.shieldTimer=0}}
 function updateShip(){if(finalBoss&&finalBoss.defeated){camera.x+=(finalBoss.x-camera.x)*0.05;camera.y+=(finalBoss.y-camera.y)*0.05;return}if(!ship.alive){ship.respawnTimer--;if(ship.respawnTimer<=0&&lives>0)respawnShip();camera.x+=(ship.x-camera.x)*0.08;camera.y+=(ship.y-camera.y)*0.08;return}if(upgrades.shields>0&&!ship.shieldActive){ship.shieldTimer--;if(ship.shieldTimer<=0){ship.shieldActive=true;sfxShieldUp(0.8)}}const scrX=ship.x-camera.x+canvas.width/2,scrY=ship.y-camera.y+canvas.height/2;ship.angle=Math.atan2(mouse.y-scrY,mouse.x-scrX);let dirX=0,dirY=0;if(keys.up)dirY-=1;if(keys.down)dirY+=1;if(keys.left)dirX-=1;if(keys.right)dirX+=1;const hasDir=dirX!==0||dirY!==0;if(hasDir){const l=Math.sqrt(dirX*dirX+dirY*dirY);dirX/=l;dirY/=l}ship.thrusting=hasDir;const accel=getAccel(),friction=getFriction(),maxSpd=getMaxSpeed();if(hasDir){ship.vx+=dirX*accel;ship.vy+=dirY*accel;const spd=Math.sqrt(ship.vx*ship.vx+ship.vy*ship.vy);if(spd>maxSpd){ship.vx=(ship.vx/spd)*maxSpd;ship.vy=(ship.vy/spd)*maxSpd}spawnExhaust()}else{const spd=Math.sqrt(ship.vx*ship.vx+ship.vy*ship.vy);if(spd>0.01){const d=Math.min(friction,spd);ship.vx-=(ship.vx/spd)*d;ship.vy-=(ship.vy/spd)*d}else{ship.vx=0;ship.vy=0}}ship.x+=ship.vx;ship.y+=ship.vy;clampShipToBoundary();if(ship.invuln>0)ship.invuln--;if(ship.invuln<=0){for(const b of bodyPositions){if(dist(ship.x,ship.y,b.x,b.y)<b.r+ship.size*0.5){damageShip();break}}}camera.x+=(ship.x-camera.x)*0.08;camera.y+=(ship.y-camera.y)*0.08}
 
 function updateFiring(){if(fireTimer>0)fireTimer--;if(!ship.alive)return;if(mouse.down&&fireTimer<=0){fireProjectile();fireTimer=Math.round(FIRE_INTERVAL*0.7)}}
 
-function showGameOver(){gamePaused=true;for(const bh of blackHoles)stopBHSound(bh);const s=calcScore();
+function showGameOver(){gamePaused=true;stopEngineSounds();for(const bh of blackHoles)stopBHSound(bh);const s=calcScore();
   const lines=[`Kills: ${kills}`,`Level: ${playerLevel}`,`Deaths: ${deaths}`];
   let html=lines.map(l=>`<div class="stat-line">${l}</div>`).join('');
   html+=`<div class="stat-line" style="margin-top:12px"><span class="score-slam" style="color:rgba(255,200,200,0.9);font-size:22px;text-shadow:0 0 30px rgba(255,80,80,0.6)">SCORE: ${s}</span></div>`;
@@ -576,7 +591,7 @@ function showGameOver(){gamePaused=true;for(const bh of blackHoles)stopBHSound(b
   const scoreDelay=1000*lines.length+2000;
   statLines.forEach((el,i)=>{if(i<lines.length){setTimeout(()=>el.classList.add('visible'),1000*(i+1))}else{setTimeout(()=>{el.classList.add('visible');el.querySelector('.score-slam').classList.add('visible')},scoreDelay)}});
   setTimeout(()=>{restBtn.style.opacity='1';restBtn.style.pointerEvents='auto'},scoreDelay+800)}
-function resetGame(){gameOverOverlay.classList.remove('active');upgradeOverlay.classList.remove('active');winOverlay.classList.remove('active');pauseOverlay.classList.remove('active');manualPause=false;bossAlertEl.style.opacity='0';enemies.length=0;bosses.length=0;bombers.length=0;crabs.length=0;bombs.length=0;bombBlasts.length=0;for(const bh of blackHoles)stopBHSound(bh);blackHoles.length=0;projectiles.length=0;enemyProjectiles.length=0;missiles.length=0;missileQueue.length=0;enemyMissiles.length=0;particles.length=0;lifeTokens.length=0;pulseWaves.length=0;fireballs.length=0;bossDebris.length=0;finalBoss=null;finalBossPhase=false;upgrades.handling=0;upgrades.health=0;upgrades.shields=0;upgrades.speed=0;upgrades.missile=0;upgrades.pulse=0;upgrades.multishot=0;kills=0;deaths=0;lives=6;playerLevel=1;playerXp=0;killsEl.textContent='0';livesElHud.textContent='6';lvlNumEl.textContent='1';xpBarEl.style.width='0%';lastSpawnTier=0;lastBossTier=0;lastBomberKill=0;lastCrabKill=0;crabSpawnTimer=420;lastFireballTier=0;lastBHTier=0;enemySpawnInterval=ENEMY_SPAWN_BASE;enemySpawnTimer=ENEMY_SPAWN_BASE;ship.x=0;ship.y=-160;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.respawnTimer=0;ship.hp=0;ship.shieldActive=false;ship.shieldTimer=0;missileCooldown=0;pulseCooldown=0;fireTimer=0;mouse.down=false;  dogfightTriggered=[false,false,false];bonusHealth=0;hasAutoTurret=false;autoTurretTimer=0;autoTurretQueue.length=0;hasLittleDog=false;littleDogTimer=0;littleDogMissiles.length=0;fbTokenTimer=0;sessionStorage.removeItem('orbitalState');sessionStorage.removeItem('dogfightResult');gamePaused=false;updateScoreDisplay();startCountdown()}
+function resetGame(){stopEngineSounds();gameOverOverlay.classList.remove('active');upgradeOverlay.classList.remove('active');winOverlay.classList.remove('active');pauseOverlay.classList.remove('active');manualPause=false;bossAlertEl.style.opacity='0';enemies.length=0;bosses.length=0;bombers.length=0;crabs.length=0;bombs.length=0;bombBlasts.length=0;for(const bh of blackHoles)stopBHSound(bh);blackHoles.length=0;projectiles.length=0;enemyProjectiles.length=0;missiles.length=0;missileQueue.length=0;enemyMissiles.length=0;particles.length=0;lifeTokens.length=0;pulseWaves.length=0;fireballs.length=0;bossDebris.length=0;finalBoss=null;finalBossPhase=false;upgrades.handling=0;upgrades.health=0;upgrades.shields=0;upgrades.speed=0;upgrades.missile=0;upgrades.pulse=0;upgrades.multishot=0;kills=0;deaths=0;lives=6;playerLevel=1;playerXp=0;killsEl.textContent='0';livesElHud.textContent='6';lvlNumEl.textContent='1';xpBarEl.style.width='0%';lastSpawnTier=0;lastBossTier=0;lastBomberKill=0;lastCrabKill=0;crabSpawnTimer=420;lastFireballTier=0;lastBHTier=0;enemySpawnInterval=ENEMY_SPAWN_BASE;enemySpawnTimer=ENEMY_SPAWN_BASE;ship.x=0;ship.y=-160;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.respawnTimer=0;ship.hp=0;ship.shieldActive=false;ship.shieldTimer=0;missileCooldown=0;pulseCooldown=0;fireTimer=0;mouse.down=false;  dogfightTriggered=[false,false,false];bonusHealth=0;hasAutoTurret=false;autoTurretTimer=0;autoTurretQueue.length=0;hasLittleDog=false;littleDogTimer=0;littleDogMissiles.length=0;fbTokenTimer=0;sessionStorage.removeItem('orbitalState');sessionStorage.removeItem('dogfightResult');gamePaused=false;updateScoreDisplay();startCountdown()}
 
 function drawRespawnText(){if(ship.alive||lives<=0)return;const progress=1-ship.respawnTimer/RESPAWN_FRAMES;ctx.save();ctx.fillStyle=`rgba(255,255,255,${0.4+Math.sin(Date.now()*0.008)*0.2})`;ctx.font='16px monospace';ctx.textAlign='center';ctx.fillText('RESPAWNING...',canvas.width/2,canvas.height/2+60);const bw=120,bx=canvas.width/2-bw/2,by=canvas.height/2+72;ctx.fillStyle='rgba(255,255,255,0.15)';ctx.fillRect(bx,by,bw,4);ctx.fillStyle='rgba(100,200,255,0.7)';ctx.fillRect(bx,by,bw*progress,4);ctx.restore()}
 
@@ -619,7 +634,7 @@ function animate(now){
   lastTime=now;
   accumulator+=delta;
   while(accumulator>=TICK_MS){
-    if(!gamePaused){updateBlackHoles();updateShip();updateFiring();updateAutoTurret();updateLittleDog();updateEnemies();updateBombers();updateCrabs();updateBosses();updateFinalBoss();updateFireballs();updateBombs();updateBombBlasts();updateMissiles();updateEnemyMissiles();updateLittleDogMissiles();updateProjectiles();updateLifeTokens();updatePulseWaves();updateParticles();updateBossDebris();t++;updateScoreDisplay()}
+    if(!gamePaused){updateBlackHoles();updateShip();updateEngineSounds();updateFiring();updateAutoTurret();updateLittleDog();updateEnemies();updateBombers();updateCrabs();updateBosses();updateFinalBoss();updateFireballs();updateBombs();updateBombBlasts();updateMissiles();updateEnemyMissiles();updateLittleDogMissiles();updateProjectiles();updateLifeTokens();updatePulseWaves();updateParticles();updateBossDebris();t++;updateScoreDisplay()}
     accumulator-=TICK_MS;
   }
   ctx.clearRect(0,0,canvas.width,canvas.height);
