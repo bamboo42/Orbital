@@ -58,6 +58,21 @@ let enemyBurnSnd=null;
 function startEnemyBurn(){if(enemyBurnSnd)return;enemyBurnSnd=createLoopAudio('Sounds/burning.wav');enemyBurnSnd.play().catch(()=>{})}
 function stopEnemyBurn(fade){if(!enemyBurnSnd)return;if(fade){fadeOutAudio(enemyBurnSnd,1500)}else{enemyBurnSnd.pause();enemyBurnSnd.currentTime=0}enemyBurnSnd=null}
 function fadeOutAudio(a,dur){if(!a)return;const step=50,dec=a.volume/(dur/step);const iv=setInterval(()=>{a.volume=Math.max(0,a.volume-dec);if(a.volume<=0){clearInterval(iv);a.pause();a.currentTime=0}},step)}
+/* ===== ENGINE SOUNDS ===== */
+const engineSnd=createLoopAudio('Sounds/engines_main.wav');_allAudioEls.push(engineSnd);
+let engineWasThrusting=false;
+function stopEngineSounds(){engineSnd.pause();engineSnd.currentTime=0;engineSnd.volume=0;engineWasThrusting=false}
+function updateEngineSounds(){
+  if(!ship.alive){if(engineWasThrusting)stopEngineSounds();return}
+  const thrusting=ship.thrusting;
+  if(thrusting){
+    if(!engineWasThrusting){engineSnd.volume=Math.min(1,0.03*masterVolume);engineSnd.play().catch(()=>{})}
+    engineSnd.volume=Math.min(1,0.03*masterVolume);
+  }else{
+    if(engineWasThrusting){engineSnd.pause();engineSnd.currentTime=0}
+  }
+  engineWasThrusting=thrusting;
+}
 
 const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const alertEl=document.getElementById('alert');
@@ -232,7 +247,7 @@ function damageShip(){
   destroyShip();
 }
 function destroyShip(){
-  ship.alive=false;ship.vx=0;ship.vy=0;
+  ship.alive=false;ship.vx=0;ship.vy=0;stopEngineSounds();
   spawnExplosion(ship.x,ship.y,35,'#ff6644');spawnExplosion(ship.x,ship.y,20,'#ffcc44');
   sfxMedBoom(1);endGame(false);
 }
@@ -267,7 +282,7 @@ const DOGFIGHT_REWARDS=[
 
 function endGame(playerWon){
   if(ending)return;
-  ending=true;mouse.down=false;
+  ending=true;mouse.down=false;stopEngineSounds();
   for(const bh of blackHoles)stopBHSound(bh);
   stopEnemyBurn(false);
   const result={playerDied:!playerWon,enemyDied:playerWon,tier:TIER};
@@ -552,7 +567,7 @@ function loop(now){
   if(!lastTime)lastTime=now;const delta=Math.min(now-lastTime,100);lastTime=now;acc+=delta;
   while(acc>=TICK){
     if(introTimer>0){introTimer--;scroll+=SCROLL_SPD}
-    else if(!gameOver){scroll+=SCROLL_SPD;updateBlackHoles();updateShip();updateFiring();updateAutoTurret();updateLittleDog();updateEnemy();updateProjs();updatePMissiles();updateLittleDogMissiles();updateEMissiles();updatePulse();updateParticles()}
+    else if(!gameOver){scroll+=SCROLL_SPD;updateBlackHoles();updateShip();updateEngineSounds();updateFiring();updateAutoTurret();updateLittleDog();updateEnemy();updateProjs();updatePMissiles();updateLittleDogMissiles();updateEMissiles();updatePulse();updateParticles()}
     else{updateParticles()}
     acc-=TICK;
   }
