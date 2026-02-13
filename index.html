@@ -178,7 +178,7 @@ function getMaxHp(){return upgrades.health+bonusHealth}
 
 const XP_BASE=60,XP_GROWTH=24,XP_ENEMY=10,XP_BOSS=80,XP_FINAL=200,XP_BOMBER=25;
 function xpForLevel(l){return XP_BASE+(l-1)*XP_GROWTH}
-function gainXp(amt){playerXp+=Math.floor(amt*0.9);let n=xpForLevel(playerLevel);while(playerXp>=n){playerXp-=n;playerLevel++;lvlNumEl.textContent=playerLevel;spawnLevelUpEffect();sfxLevelUp(1);if(upgrades.shields>0)ship.shieldActive=true;showUpgradeUI();n=xpForLevel(playerLevel)}xpBarEl.style.width=(playerXp/xpForLevel(playerLevel)*100)+'%'}
+function gainXp(amt){playerXp+=Math.floor(amt*0.81);let n=xpForLevel(playerLevel);while(playerXp>=n){playerXp-=n;playerLevel++;lvlNumEl.textContent=playerLevel;spawnLevelUpEffect();sfxLevelUp(1);if(upgrades.shields>0)ship.shieldActive=true;showUpgradeUI();n=xpForLevel(playerLevel)}xpBarEl.style.width=(playerXp/xpForLevel(playerLevel)*100)+'%'}
 function spawnLevelUpEffect(){if(!ship.alive)return;for(let i=0;i<20;i++){const a=(i/20)*Math.PI*2;particles.push({x:ship.x,y:ship.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,life:1,decay:0.02,r:3,color:'#88ccff'})}}
 
 const ship={x:0,y:-160,vx:0,vy:0,angle:0,thrusting:false,size:14,alive:true,respawnTimer:0,invuln:0,hp:0,shieldActive:false,shieldTimer:0};
