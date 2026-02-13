@@ -178,7 +178,7 @@ function getMaxHp(){return upgrades.health+bonusHealth}
 
 const XP_BASE=60,XP_GROWTH=24,XP_ENEMY=10,XP_BOSS=80,XP_FINAL=200,XP_BOMBER=25;
 function xpForLevel(l){return XP_BASE+(l-1)*XP_GROWTH}
-function gainXp(amt){playerXp+=Math.floor(amt*0.81);let n=xpForLevel(playerLevel);while(playerXp>=n){playerXp-=n;playerLevel++;lvlNumEl.textContent=playerLevel;spawnLevelUpEffect();sfxLevelUp(1);if(upgrades.shields>0)ship.shieldActive=true;showUpgradeUI();n=xpForLevel(playerLevel)}xpBarEl.style.width=(playerXp/xpForLevel(playerLevel)*100)+'%'}
+function gainXp(amt){playerXp+=Math.floor(amt*0.648);let n=xpForLevel(playerLevel);while(playerXp>=n){playerXp-=n;playerLevel++;lvlNumEl.textContent=playerLevel;spawnLevelUpEffect();sfxLevelUp(1);if(upgrades.shields>0)ship.shieldActive=true;showUpgradeUI();n=xpForLevel(playerLevel)}xpBarEl.style.width=(playerXp/xpForLevel(playerLevel)*100)+'%'}
 function spawnLevelUpEffect(){if(!ship.alive)return;for(let i=0;i<20;i++){const a=(i/20)*Math.PI*2;particles.push({x:ship.x,y:ship.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,life:1,decay:0.02,r:3,color:'#88ccff'})}}
 
 const ship={x:0,y:-160,vx:0,vy:0,angle:0,thrusting:false,size:14,alive:true,respawnTimer:0,invuln:0,hp:0,shieldActive:false,shieldTimer:0};
@@ -344,7 +344,7 @@ function drawBlackHoles(){const now=Date.now();for(const bh of blackHoles){const
 }}
 
 let lastSpawnTier=0,lastBossTier=0,lastBomberKill=0;
-const ENEMY_SPAWN_BASE=300,ENEMY_SPAWN_MIN=30,ENEMY_SPAWN_STEP=30;
+const ENEMY_SPAWN_BASE=260,ENEMY_SPAWN_MIN=25;
 let enemySpawnInterval=ENEMY_SPAWN_BASE;
 function addKill(xp){kills++;killsEl.textContent=kills;gainXp(xp||XP_ENEMY);
 
@@ -360,7 +360,7 @@ function addKill(xp){kills++;killsEl.textContent=kills;gainXp(xp||XP_ENEMY);
   /* Check black hole BEFORE final boss return so it never gets skipped */
   const bhTier=Math.floor(kills/BH_SPAWN_INTERVAL);if(bhTier>lastBHTier){lastBHTier=bhTier;spawnBlackHole()}
   if(kills>=FINAL_BOSS_THRESHOLD&&!finalBossPhase){startFinalBossPhase();return}
-  const tier=Math.floor(kills/10);if(tier>lastSpawnTier){lastSpawnTier=tier;enemySpawnInterval=Math.max(ENEMY_SPAWN_MIN,ENEMY_SPAWN_BASE-tier*ENEMY_SPAWN_STEP)}if(tier>lastBossTier){lastBossTier=tier;spawnBoss()}
+  const tier=Math.floor(kills/10);if(tier>lastSpawnTier){lastSpawnTier=tier;enemySpawnInterval=Math.max(ENEMY_SPAWN_MIN,Math.round(ENEMY_SPAWN_BASE-tier*(ENEMY_SPAWN_BASE-ENEMY_SPAWN_MIN)/15))}if(tier>lastBossTier){lastBossTier=tier;spawnBoss()}
   const bomberTier=Math.floor(kills/8);if(bomberTier>lastBomberKill&&!finalBossPhase){lastBomberKill=bomberTier;spawnBomber()}
   const fbTier=Math.floor(kills/25);if(fbTier>lastFireballTier){lastFireballTier=fbTier;spawnFireball()}}
 let enemySpawnTimer=ENEMY_SPAWN_BASE;
