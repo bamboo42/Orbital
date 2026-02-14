@@ -33,10 +33,11 @@ canvas{display:block}
 <script>
 /* ===== AUDIO SYSTEM ===== */
 let masterVolume=parseFloat(localStorage.getItem('orbitalMasterVol'))||1;
+let musicVolume=parseFloat(localStorage.getItem('orbitalMusicVol'))||1;
 const _allAudioEls=[];
 function createSoundPool(src,poolSize){const pool=[];for(let i=0;i<poolSize;i++){const a=new Audio(src);a.preload='auto';pool.push(a);_allAudioEls.push(a)}let idx=0;return function(vol){const a=pool[idx];a.volume=Math.min(1,(vol!==undefined?vol:1)*masterVolume);a.currentTime=0;a.play().catch(()=>{});idx=(idx+1)%pool.length}}
 let _audioUnlocked=false;
-function unlockAudio(){if(_audioUnlocked)return;_audioUnlocked=true;for(const a of _allAudioEls){a.volume=0;a.play().then(()=>{a.pause();a.currentTime=0}).catch(()=>{})}document.removeEventListener('click',unlockAudio,true);document.removeEventListener('keydown',unlockAudio,true);document.removeEventListener('mousedown',unlockAudio,true)}
+function unlockAudio(){if(_audioUnlocked)return;_audioUnlocked=true;function primeAll(){for(const a of _allAudioEls){a.volume=0;a.play().then(()=>{a.pause();a.currentTime=0}).catch(()=>{})}}primeAll();let r=0;const ri=setInterval(()=>{primeAll();if(++r>=6)clearInterval(ri)},500);document.removeEventListener('click',unlockAudio,true);document.removeEventListener('keydown',unlockAudio,true);document.removeEventListener('mousedown',unlockAudio,true)}
 document.addEventListener('click',unlockAudio,true);
 document.addEventListener('keydown',unlockAudio,true);
 document.addEventListener('mousedown',unlockAudio,true);
@@ -73,6 +74,31 @@ function updateEngineSounds(){
   }
   engineWasThrusting=thrusting;
 }
+
+/* ===== BACKGROUND MUSIC ===== */
+const bgMusic=new Audio('Sounds/Time_To_Move_Game_Edit.mp3');
+bgMusic.preload='auto';bgMusic.loop=true;
+const BG_MUSIC_VOL=0.4;
+function updateBgMusicVol(){bgMusic.volume=Math.min(1,BG_MUSIC_VOL*musicVolume)}
+function saveMusicTime(){sessionStorage.setItem('orbitalMusicTime',''+bgMusic.currentTime)}
+window.addEventListener('beforeunload',saveMusicTime);
+const _savedMusicTime=parseFloat(sessionStorage.getItem('orbitalMusicTime'))||0;
+function initBgMusic(fromTime){bgMusic.currentTime=fromTime!==undefined?fromTime:_savedMusicTime;updateBgMusicVol();bgMusic.play().catch(()=>{})}
+function _ensureBgMusic(){if(!_audioReady)return;if(bgMusic.paused){initBgMusic()}document.removeEventListener('click',_ensureBgMusic,true);document.removeEventListener('keydown',_ensureBgMusic,true);document.removeEventListener('mousedown',_ensureBgMusic,true)}
+document.addEventListener('click',_ensureBgMusic,true);
+document.addEventListener('keydown',_ensureBgMusic,true);
+document.addEventListener('mousedown',_ensureBgMusic,true);
+
+/* ===== AUDIO LOADING ===== */
+let _audioReady=false;
+function _onDfAudioReady(){initBgMusic()}
+(function(){
+  const all=[..._allAudioEls,bgMusic];
+  let loaded=0;const total=all.length;
+  function check(){if(++loaded>=total&&!_audioReady){_audioReady=true;_onDfAudioReady()}}
+  for(const a of all){a.load();if(a.readyState>=4){check()}else{a.addEventListener('canplaythrough',check,{once:true})}}
+  setTimeout(()=>{if(!_audioReady){_audioReady=true;_onDfAudioReady()}},10000);
+})();
 
 const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const alertEl=document.getElementById('alert');
@@ -133,7 +159,7 @@ function mkS(n){return Array.from({length:n},()=>({x:Math.random()*4000,y:Math.r
 
 /* ===== WALL ASTEROIDS ===== */
 const wallRocks=[];
-function genWalls(){wallRocks.length=0;const tH=canvas.height+400,lW=chL,rW=canvas.width-chR;for(let i=0;i<Math.floor(lW*tH/(40*40));i++)wallRocks.push(mkR(Math.random()*lW,Math.random()*tH-200));for(let i=0;i<Math.floor(rW*tH/(40*40));i++)wallRocks.push(mkR(chR+Math.random()*rW,Math.random()*tH-200));for(let i=0;i<15;i++){const y=Math.random()*tH-200;wallRocks.push(mkR(chL-8-Math.random()*25,y));wallRocks.push(mkR(chR+8+Math.random()*25,y))}}
+function genWalls(){wallRocks.length=0;const tH=canvas.height+400,lW=chL,rW=canvas.width-chR;for(let i=0;i<Math.floor(lW*tH/(80*40));i++)wallRocks.push(mkR(Math.random()*lW,Math.random()*tH-200));for(let i=0;i<Math.floor(rW*tH/(80*40));i++)wallRocks.push(mkR(chR+Math.random()*rW,Math.random()*tH-200));for(let i=0;i<8;i++){const y=Math.random()*tH-200;wallRocks.push(mkR(chL-8-Math.random()*25,y));wallRocks.push(mkR(chR+8+Math.random()*25,y))}}
 function mkR(x,y){const sz=4+Math.random()*14,nV=5+Math.floor(Math.random()*4),v=[];for(let i=0;i<nV;i++){const a=(i/nV)*Math.PI*2;v.push({x:Math.cos(a)*sz*(0.6+Math.random()*0.4),y:Math.sin(a)*sz*(0.6+Math.random()*0.4)})}const sh=Math.floor(55+Math.random()*45);return{x,baseY:y,sz,verts:v,color:`rgb(${sh},${sh-10},${sh-15})`}}
 genWalls();
 
@@ -225,7 +251,7 @@ function drawLittleDogMissiles(){for(const m of littleDogMissiles){const a=Math.
 
 /* ===== GAME STATE ===== */
 let gameOver=false,ending=false;
-let introTimer=90;
+let introTimer=180;const INTRO_TOTAL=180;
 
 /* ===== INPUT ===== */
 window.addEventListener('keydown',e=>{if(gameOver||ending)return;if(e.code==='KeyW')keys.up=true;if(e.code==='KeyS')keys.down=true;if(e.code==='KeyA')keys.left=true;if(e.code==='KeyD')keys.right=true;if(e.code==='Space'){e.preventDefault();activatePulse()}});
@@ -236,8 +262,7 @@ window.addEventListener('mouseup',e=>{if(e.button===0)mouse.down=false});
 window.addEventListener('contextmenu',e=>e.preventDefault());
 
 /* ===== INTRO ===== */
-alertEl.style.opacity='1';
-setTimeout(()=>{alertEl.style.opacity='0'},2500);
+let _introAlertShown=false;
 
 /* ===== DAMAGE PLAYER ===== */
 function damageShip(){
@@ -289,7 +314,7 @@ function endGame(playerWon){
   if(!playerWon){
     resultMsg.innerHTML='TOO MUCH DAMAGE SUSTAINED!<div style="font-size:14px;color:#ff6666;margin-top:10px;letter-spacing:1px;text-shadow:0 0 10px rgba(255,60,60,0.4)">you have lost a life</div>';resultMsg.style.color='#ff4444';resultMsg.style.textShadow='0 0 20px rgba(255,60,60,0.5)';
     setTimeout(()=>{resultText.style.opacity='1'},200);
-    setTimeout(()=>{sessionStorage.setItem('dogfightResult',JSON.stringify(result));window.location.href='index.html'},2200);
+    setTimeout(()=>{saveMusicTime();sessionStorage.setItem('dogfightResult',JSON.stringify(result));window.location.href='index.html'},2200);
     return;
   }
   /* Player won — show reward overlay */
@@ -319,6 +344,7 @@ function endGame(playerWon){
     setTimeout(()=>line2.classList.add('visible'),1300);
     setTimeout(()=>btn.classList.add('visible'),1800);
     btn.addEventListener('click',()=>{
+      saveMusicTime();
       sessionStorage.setItem('dogfightResult',JSON.stringify(result));
       window.location.href='index.html';
     });
@@ -561,12 +587,42 @@ function drawPulse(){
   for(const w of pulseWaves){const prog=1-w.life/PULSE_EXPAND_FRAMES,alpha=(1-prog)*0.6,th=6*(1-prog*0.5);ctx.beginPath();ctx.arc(w.x,w.y,w.radius,0,Math.PI*2);ctx.strokeStyle=`rgba(100,180,255,${alpha*0.3})`;ctx.lineWidth=th*3;ctx.stroke();ctx.beginPath();ctx.arc(w.x,w.y,w.radius,0,Math.PI*2);ctx.strokeStyle=`rgba(150,220,255,${alpha})`;ctx.lineWidth=th;ctx.stroke();ctx.beginPath();ctx.arc(w.x,w.y,w.radius*0.97,0,Math.PI*2);ctx.strokeStyle=`rgba(220,240,255,${alpha*0.5})`;ctx.lineWidth=1.5;ctx.stroke()}
 }
 
+/* ===== INTRO COUNTDOWN ===== */
+function drawIntroCountdown(){
+  if(introTimer<=0)return;
+  const cx=canvas.width/2,cy=canvas.height/2+60;
+  if(!_audioReady){
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+    const pulse=0.5+Math.sin(Date.now()*0.004)*0.3;
+    ctx.font='bold 20px monospace';ctx.fillStyle=`rgba(255,255,255,${pulse})`;
+    ctx.fillText('LOADING...',cx,cy);ctx.restore();return;
+  }
+  const secs=introTimer/60;
+  const remaining=Math.ceil(secs);
+  const frac=secs%1;
+  const alpha=frac<0.3?frac/0.3:frac>0.7?1-(frac-0.7)/0.3:1;
+  const numScale=frac<0.2?0.6+0.4*(frac/0.2):1;
+  ctx.save();
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 28px monospace';
+  ctx.fillStyle=`rgba(255,60,60,${0.5+alpha*0.3})`;
+  ctx.fillText('ENTERING DOGFIGHT',cx,cy-50);
+  ctx.font=`bold ${Math.round(90*numScale)}px monospace`;
+  ctx.fillStyle=`rgba(255,40,40,${alpha*0.9})`;
+  ctx.fillText(remaining,cx,cy+30);
+  const g=ctx.createRadialGradient(cx,cy+30,0,cx,cy+30,80*numScale);
+  g.addColorStop(0,`rgba(255,30,30,${alpha*0.15})`);
+  g.addColorStop(1,'transparent');
+  ctx.beginPath();ctx.arc(cx,cy+30,80*numScale,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  ctx.restore();
+}
+
 /* ===== GAME LOOP ===== */
 let lastTime=0;const TICK=1000/60;let acc=0;
 function loop(now){
   if(!lastTime)lastTime=now;const delta=Math.min(now-lastTime,100);lastTime=now;acc+=delta;
   while(acc>=TICK){
-    if(introTimer>0){introTimer--;scroll+=SCROLL_SPD}
+    if(introTimer>0){if(_audioReady)introTimer--;scroll+=SCROLL_SPD;if(introTimer<=0&&!_introAlertShown){_introAlertShown=true;alertEl.style.opacity='1';setTimeout(()=>{alertEl.style.opacity='0'},2000)}}
     else if(!gameOver){scroll+=SCROLL_SPD;updateBlackHoles();updateShip();updateEngineSounds();updateFiring();updateAutoTurret();updateLittleDog();updateEnemy();updateProjs();updatePMissiles();updateLittleDogMissiles();updateEMissiles();updatePulse();updateParticles()}
     else{updateParticles()}
     acc-=TICK;
@@ -649,6 +705,7 @@ function loop(now){
     }
     ctx.restore();
   }
+  drawIntroCountdown();
   requestAnimationFrame(loop);
 }
 loop(0);
