@@ -244,7 +244,7 @@ function saveGameState(){
     upgrades:{...upgrades},
     shipState:{x:ship.x,y:ship.y,vx:ship.vx,vy:ship.vy,hp:ship.hp,
       shieldActive:ship.shieldActive,shieldTimer:ship.shieldTimer,invuln:ship.invuln},
-    missileCooldown,pulseCooldown,fireTimer,
+    missileCooldown,pulseCooldown,burstCooldown,
     lastSpawnTier,lastBossTier,lastBomberKill,lastCrabKill,crabSpawnTimer,lastFireballTier,lastBHTier,
     enemySpawnInterval,enemySpawnTimer,finalBossPhase,
     dogfightTriggered,bonusHealth,hasAutoTurret,hasLittleDog
@@ -262,7 +262,7 @@ function loadGameState(){
     playerLevel=s.playerLevel;playerXp=s.playerXp;t=s.t;
     Object.assign(upgrades,s.upgrades);
     Object.assign(ship,{alive:true,respawnTimer:0},s.shipState);
-    missileCooldown=s.missileCooldown;pulseCooldown=s.pulseCooldown;fireTimer=s.fireTimer;
+    missileCooldown=s.missileCooldown;pulseCooldown=s.pulseCooldown;burstCooldown=s.burstCooldown||0;
     lastSpawnTier=s.lastSpawnTier;lastBossTier=s.lastBossTier;
     lastBomberKill=s.lastBomberKill;lastCrabKill=s.lastCrabKill||0;crabSpawnTimer=s.crabSpawnTimer||420;lastFireballTier=s.lastFireballTier;
     lastBHTier=s.lastBHTier;
@@ -310,11 +310,11 @@ function triggerDogfight(tier){
 
 const keys={up:false,down:false,left:false,right:false};
 const mouse={x:0,y:0,down:false};
-const FIRE_INTERVAL=15;let fireTimer=0;
+const BURST_INTERVAL=24,BURST_COUNT=3,BURST_SHOT_DELAY=4;let burstCooldown=0;const burstQueue=[];
 window.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();if(manualPause){resumeGame();return}if(!gamePaused){pauseGame();return}return}if(gamePaused)return;if(e.code==='KeyW')keys.up=true;if(e.code==='KeyS')keys.down=true;if(e.code==='KeyA')keys.left=true;if(e.code==='KeyD')keys.right=true;if(e.code==='Space'){e.preventDefault();activatePulse()}});
 window.addEventListener('keyup',e=>{if(e.code==='KeyW')keys.up=false;if(e.code==='KeyS')keys.down=false;if(e.code==='KeyA')keys.left=false;if(e.code==='KeyD')keys.right=false});
 window.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
-window.addEventListener('mousedown',e=>{if(gamePaused)return;if(e.button===0){mouse.down=true;fireTimer=0}if(e.button===2&&ship.alive)fireMissile()});
+window.addEventListener('mousedown',e=>{if(gamePaused)return;if(e.button===0){mouse.down=true;mouse.justPressed=true}if(e.button===2&&ship.alive)fireMissile()});
 window.addEventListener('mouseup',e=>{if(e.button===0)mouse.down=false});
 window.addEventListener('contextmenu',e=>e.preventDefault());
 
@@ -610,7 +610,7 @@ function destroyShip(){ship.alive=false;ship.respawnTimer=RESPAWN_FRAMES;ship.vx
 function respawnShip(){if(lives<=0)return;const pos=findSafeSpawn(0,0,300,600);ship.x=pos.x;ship.y=pos.y;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.hp=getMaxHp();if(upgrades.shields>0){ship.shieldActive=true;ship.shieldTimer=0}}
 function updateShip(){if(finalBoss&&finalBoss.defeated){camera.x+=(finalBoss.x-camera.x)*0.05;camera.y+=(finalBoss.y-camera.y)*0.05;return}if(!ship.alive){ship.respawnTimer--;if(ship.respawnTimer<=0&&lives>0)respawnShip();camera.x+=(ship.x-camera.x)*0.08;camera.y+=(ship.y-camera.y)*0.08;return}if(upgrades.shields>0&&!ship.shieldActive){ship.shieldTimer--;if(ship.shieldTimer<=0){ship.shieldActive=true;sfxShieldUp(0.8)}}const scrX=ship.x-camera.x+canvas.width/2,scrY=ship.y-camera.y+canvas.height/2;ship.angle=Math.atan2(mouse.y-scrY,mouse.x-scrX);let dirX=0,dirY=0;if(keys.up)dirY-=1;if(keys.down)dirY+=1;if(keys.left)dirX-=1;if(keys.right)dirX+=1;const hasDir=dirX!==0||dirY!==0;if(hasDir){const l=Math.sqrt(dirX*dirX+dirY*dirY);dirX/=l;dirY/=l}ship.thrusting=hasDir;const accel=getAccel(),friction=getFriction(),maxSpd=getMaxSpeed();if(hasDir){ship.vx+=dirX*accel;ship.vy+=dirY*accel;const spd=Math.sqrt(ship.vx*ship.vx+ship.vy*ship.vy);if(spd>maxSpd){ship.vx=(ship.vx/spd)*maxSpd;ship.vy=(ship.vy/spd)*maxSpd}spawnExhaust()}else{const spd=Math.sqrt(ship.vx*ship.vx+ship.vy*ship.vy);if(spd>0.01){const d=Math.min(friction,spd);ship.vx-=(ship.vx/spd)*d;ship.vy-=(ship.vy/spd)*d}else{ship.vx=0;ship.vy=0}}ship.x+=ship.vx;ship.y+=ship.vy;clampShipToBoundary();if(ship.invuln>0)ship.invuln--;if(ship.invuln<=0){for(const b of bodyPositions){if(dist(ship.x,ship.y,b.x,b.y)<b.r+ship.size*0.5){damageShip();break}}}camera.x+=(ship.x-camera.x)*0.08;camera.y+=(ship.y-camera.y)*0.08}
 
-function updateFiring(){if(fireTimer>0)fireTimer--;if(!ship.alive)return;if(mouse.down&&fireTimer<=0){fireProjectile();fireTimer=Math.round(FIRE_INTERVAL*0.7)}}
+function updateFiring(){if(burstCooldown>0)burstCooldown--;for(let i=burstQueue.length-1;i>=0;i--){if(burstQueue[i].delay<=0){if(ship.alive)fireProjectile();burstQueue.splice(i,1)}else{burstQueue[i].delay--}}if(!ship.alive)return;if(mouse.down&&burstCooldown<=0&&burstQueue.length===0){for(let i=0;i<BURST_COUNT;i++)burstQueue.push({delay:i*BURST_SHOT_DELAY});burstCooldown=BURST_INTERVAL;mouse.justPressed=false}}
 
 function showGameOver(){gamePaused=true;stopEngineSounds();for(const bh of blackHoles)stopBHSound(bh);const s=calcScore();
   const lines=[`Kills: ${kills}`,`Level: ${playerLevel}`,`Deaths: ${deaths}`];
@@ -621,7 +621,7 @@ function showGameOver(){gamePaused=true;stopEngineSounds();for(const bh of black
   const scoreDelay=1000*lines.length+2000;
   statLines.forEach((el,i)=>{if(i<lines.length){setTimeout(()=>el.classList.add('visible'),1000*(i+1))}else{setTimeout(()=>{el.classList.add('visible');el.querySelector('.score-slam').classList.add('visible')},scoreDelay)}});
   setTimeout(()=>{restBtn.style.opacity='1';restBtn.style.pointerEvents='auto'},scoreDelay+800)}
-function resetGame(){stopEngineSounds();gameOverOverlay.classList.remove('active');upgradeOverlay.classList.remove('active');winOverlay.classList.remove('active');pauseOverlay.classList.remove('active');manualPause=false;bossAlertEl.style.opacity='0';enemies.length=0;bosses.length=0;bombers.length=0;crabs.length=0;bombs.length=0;bombBlasts.length=0;for(const bh of blackHoles)stopBHSound(bh);blackHoles.length=0;projectiles.length=0;enemyProjectiles.length=0;missiles.length=0;missileQueue.length=0;enemyMissiles.length=0;particles.length=0;lifeTokens.length=0;pulseWaves.length=0;fireballs.length=0;bossDebris.length=0;finalBoss=null;finalBossPhase=false;upgrades.handling=0;upgrades.health=0;upgrades.shields=0;upgrades.speed=0;upgrades.missile=0;upgrades.pulse=0;upgrades.multishot=0;kills=0;deaths=0;lives=6;playerLevel=1;playerXp=0;killsEl.textContent='0';livesElHud.textContent='6';lvlNumEl.textContent='1';xpBarEl.style.width='0%';lastSpawnTier=0;lastBossTier=0;lastBomberKill=0;lastCrabKill=0;crabSpawnTimer=420;lastFireballTier=0;lastBHTier=0;enemySpawnInterval=ENEMY_SPAWN_BASE;enemySpawnTimer=ENEMY_SPAWN_BASE;ship.x=0;ship.y=-160;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.respawnTimer=0;ship.hp=0;ship.shieldActive=false;ship.shieldTimer=0;missileCooldown=0;pulseCooldown=0;fireTimer=0;mouse.down=false;  dogfightTriggered=[false,false,false];bonusHealth=0;hasAutoTurret=false;autoTurretTimer=0;autoTurretQueue.length=0;hasLittleDog=false;littleDogTimer=0;littleDogMissiles.length=0;fbTokenTimer=0;sessionStorage.removeItem('orbitalState');sessionStorage.removeItem('dogfightResult');sessionStorage.removeItem('orbitalMusicTime');gamePaused=false;updateScoreDisplay();initBgMusic(0);startCountdown()}
+function resetGame(){stopEngineSounds();gameOverOverlay.classList.remove('active');upgradeOverlay.classList.remove('active');winOverlay.classList.remove('active');pauseOverlay.classList.remove('active');manualPause=false;bossAlertEl.style.opacity='0';enemies.length=0;bosses.length=0;bombers.length=0;crabs.length=0;bombs.length=0;bombBlasts.length=0;for(const bh of blackHoles)stopBHSound(bh);blackHoles.length=0;projectiles.length=0;enemyProjectiles.length=0;missiles.length=0;missileQueue.length=0;enemyMissiles.length=0;particles.length=0;lifeTokens.length=0;pulseWaves.length=0;fireballs.length=0;bossDebris.length=0;finalBoss=null;finalBossPhase=false;upgrades.handling=0;upgrades.health=0;upgrades.shields=0;upgrades.speed=0;upgrades.missile=0;upgrades.pulse=0;upgrades.multishot=0;kills=0;deaths=0;lives=6;playerLevel=1;playerXp=0;killsEl.textContent='0';livesElHud.textContent='6';lvlNumEl.textContent='1';xpBarEl.style.width='0%';lastSpawnTier=0;lastBossTier=0;lastBomberKill=0;lastCrabKill=0;crabSpawnTimer=420;lastFireballTier=0;lastBHTier=0;enemySpawnInterval=ENEMY_SPAWN_BASE;enemySpawnTimer=ENEMY_SPAWN_BASE;ship.x=0;ship.y=-160;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.respawnTimer=0;ship.hp=0;ship.shieldActive=false;ship.shieldTimer=0;missileCooldown=0;pulseCooldown=0;burstCooldown=0;burstQueue.length=0;mouse.down=false;  dogfightTriggered=[false,false,false];bonusHealth=0;hasAutoTurret=false;autoTurretTimer=0;autoTurretQueue.length=0;hasLittleDog=false;littleDogTimer=0;littleDogMissiles.length=0;fbTokenTimer=0;sessionStorage.removeItem('orbitalState');sessionStorage.removeItem('dogfightResult');sessionStorage.removeItem('orbitalMusicTime');gamePaused=false;updateScoreDisplay();initBgMusic(0);startCountdown()}
 
 function drawRespawnText(){if(ship.alive||lives<=0)return;const progress=1-ship.respawnTimer/RESPAWN_FRAMES;ctx.save();ctx.fillStyle=`rgba(255,255,255,${0.4+Math.sin(Date.now()*0.008)*0.2})`;ctx.font='16px monospace';ctx.textAlign='center';ctx.fillText('RESPAWNING...',canvas.width/2,canvas.height/2+60);const bw=120,bx=canvas.width/2-bw/2,by=canvas.height/2+72;ctx.fillStyle='rgba(255,255,255,0.15)';ctx.fillRect(bx,by,bw,4);ctx.fillStyle='rgba(100,200,255,0.7)';ctx.fillRect(bx,by,bw*progress,4);ctx.restore()}
 
