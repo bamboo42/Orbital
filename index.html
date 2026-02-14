@@ -58,9 +58,9 @@
   .vol-wrap { margin-top: 20px; display: flex; align-items: center; gap: 10px; }
   .vol-label { color: rgba(255,255,255,0.6); font: 12px monospace; min-width: 30px; text-align: right; }
   .vol-pct { color: rgba(255,255,255,0.6); font: 12px monospace; min-width: 34px; }
-  #volSlider { -webkit-appearance: none; appearance: none; width: 160px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; outline: none; cursor: pointer; }
-  #volSlider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: rgba(80,160,255,0.8); border: 2px solid rgba(80,160,255,0.5); cursor: pointer; }
-  #volSlider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: rgba(80,160,255,0.8); border: 2px solid rgba(80,160,255,0.5); cursor: pointer; }
+  #volSlider, #musicSlider { -webkit-appearance: none; appearance: none; width: 160px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; outline: none; cursor: pointer; }
+  #volSlider::-webkit-slider-thumb, #musicSlider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: rgba(80,160,255,0.8); border: 2px solid rgba(80,160,255,0.5); cursor: pointer; }
+  #volSlider::-moz-range-thumb, #musicSlider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: rgba(80,160,255,0.8); border: 2px solid rgba(80,160,255,0.5); cursor: pointer; }
 </style>
 </head>
 <body>
@@ -72,14 +72,15 @@
 <div id="gameOverOverlay" class="overlay"><h2>Game Over</h2><div class="stats" id="goStats"></div><button class="btn" id="restartBtn">RESTART</button></div>
 <div id="winOverlay" class="overlay"><h2>Victory!</h2><div class="stats" id="winStats"></div><button class="btn" id="winRestartBtn">PLAY AGAIN</button></div>
 <div id="bossAlert">⚠ FINAL BOSS ⚠</div>
-<div id="pauseOverlay"><h2>Paused</h2><button id="resumeBtn">RESUME</button><div class="vol-wrap"><span class="vol-label">🔊</span><input type="range" id="volSlider" min="0" max="100" value="100"><span class="vol-pct" id="volPct">100%</span></div><div class="pause-hint">Press ESC to resume</div></div>
+<div id="pauseOverlay"><h2>Paused</h2><button id="resumeBtn">RESUME</button><div class="vol-wrap"><span class="vol-label">SFX</span><input type="range" id="volSlider" min="0" max="100" value="100"><span class="vol-pct" id="volPct">100%</span></div><div class="vol-wrap"><span class="vol-label">MUSIC</span><input type="range" id="musicSlider" min="0" max="100" value="100"><span class="vol-pct" id="musicPct">100%</span></div><div class="pause-hint">Press ESC to resume</div></div>
 <script>
 /* ===== AUDIO SYSTEM ===== */
 let masterVolume=parseFloat(localStorage.getItem('orbitalMasterVol'))||1;
+let musicVolume=parseFloat(localStorage.getItem('orbitalMusicVol'))||1;
 const _allAudioEls=[];
 function createSoundPool(src,poolSize){const pool=[];for(let i=0;i<poolSize;i++){const a=new Audio(src);a.preload='auto';pool.push(a);_allAudioEls.push(a)}let idx=0;return function(vol){const a=pool[idx];a.volume=Math.min(1,(vol!==undefined?vol:1)*masterVolume);a.currentTime=0;a.play().catch(()=>{});idx=(idx+1)%pool.length}}
 let _audioUnlocked=false;
-function unlockAudio(){if(_audioUnlocked)return;_audioUnlocked=true;for(const a of _allAudioEls){a.volume=0;a.play().then(()=>{a.pause();a.currentTime=0}).catch(()=>{})}document.removeEventListener('click',unlockAudio,true);document.removeEventListener('keydown',unlockAudio,true);document.removeEventListener('mousedown',unlockAudio,true)}
+function unlockAudio(){if(_audioUnlocked)return;_audioUnlocked=true;function primeAll(){for(const a of _allAudioEls){a.volume=0;a.play().then(()=>{a.pause();a.currentTime=0}).catch(()=>{})}}primeAll();let r=0;const ri=setInterval(()=>{primeAll();if(++r>=6)clearInterval(ri)},500);document.removeEventListener('click',unlockAudio,true);document.removeEventListener('keydown',unlockAudio,true);document.removeEventListener('mousedown',unlockAudio,true)}
 document.addEventListener('click',unlockAudio,true);
 document.addEventListener('keydown',unlockAudio,true);
 document.addEventListener('mousedown',unlockAudio,true);
@@ -116,6 +117,31 @@ function updateEngineSounds(){
   engineWasThrusting=thrusting;
 }
 
+/* ===== BACKGROUND MUSIC ===== */
+const bgMusic=new Audio('Sounds/Time_To_Move_Game_Edit.mp3');
+bgMusic.preload='auto';bgMusic.loop=true;
+const BG_MUSIC_VOL=0.4;
+function updateBgMusicVol(){bgMusic.volume=Math.min(1,BG_MUSIC_VOL*musicVolume)}
+function saveMusicTime(){sessionStorage.setItem('orbitalMusicTime',''+bgMusic.currentTime)}
+window.addEventListener('beforeunload',saveMusicTime);
+const _savedMusicTime=parseFloat(sessionStorage.getItem('orbitalMusicTime'))||0;
+function initBgMusic(fromTime){bgMusic.currentTime=fromTime!==undefined?fromTime:_savedMusicTime;updateBgMusicVol();bgMusic.play().catch(()=>{})}
+function _ensureBgMusic(){if(!_audioReady)return;if(bgMusic.paused){initBgMusic()}document.removeEventListener('click',_ensureBgMusic,true);document.removeEventListener('keydown',_ensureBgMusic,true);document.removeEventListener('mousedown',_ensureBgMusic,true)}
+document.addEventListener('click',_ensureBgMusic,true);
+document.addEventListener('keydown',_ensureBgMusic,true);
+document.addEventListener('mousedown',_ensureBgMusic,true);
+
+/* ===== AUDIO LOADING ===== */
+let _audioReady=false;
+let _onAudioReady=function(){};
+(function(){
+  const all=[..._allAudioEls,bgMusic];
+  let loaded=0;const total=all.length;
+  function check(){if(++loaded>=total&&!_audioReady){_audioReady=true;_onAudioReady()}}
+  for(const a of all){a.load();if(a.readyState>=4){check()}else{a.addEventListener('canplaythrough',check,{once:true})}}
+  setTimeout(()=>{if(!_audioReady){_audioReady=true;_onAudioReady()}},10000);
+})();
+
 const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const killsEl=document.getElementById('kills'),livesElHud=document.getElementById('livesEl');
 const scoreLiveEl=document.getElementById('scoreLive');
@@ -132,6 +158,9 @@ document.getElementById('resumeBtn').addEventListener('click',e=>{e.stopPropagat
 const volSlider=document.getElementById('volSlider'),volPct=document.getElementById('volPct');
 volSlider.value=Math.round(masterVolume*100);volPct.textContent=volSlider.value+'%';
 volSlider.addEventListener('input',()=>{masterVolume=volSlider.value/100;volPct.textContent=volSlider.value+'%';localStorage.setItem('orbitalMasterVol',masterVolume)});
+const musicSlider=document.getElementById('musicSlider'),musicPct=document.getElementById('musicPct');
+musicSlider.value=Math.round(musicVolume*100);musicPct.textContent=musicSlider.value+'%';
+musicSlider.addEventListener('input',()=>{musicVolume=musicSlider.value/100;musicPct.textContent=musicSlider.value+'%';localStorage.setItem('orbitalMusicVol',musicVolume);updateBgMusicVol()});
 pauseOverlay.addEventListener('mousedown',e=>e.stopPropagation());pauseOverlay.addEventListener('mouseup',e=>e.stopPropagation());pauseOverlay.addEventListener('click',e=>e.stopPropagation());
 function pauseGame(){if(gamePaused)return;manualPause=true;gamePaused=true;mouse.down=false;stopEngineSounds();pauseOverlay.classList.add('active')}
 function resumeGame(){if(!manualPause)return;manualPause=false;gamePaused=false;pauseOverlay.classList.remove('active')}
@@ -273,6 +302,7 @@ function triggerDogfight(tier){
     },500);
   },2000);
   setTimeout(()=>{
+    saveMusicTime();
     saveGameState();
     window.location.href='dogfight.html';
   },2500);
@@ -591,13 +621,14 @@ function showGameOver(){gamePaused=true;stopEngineSounds();for(const bh of black
   const scoreDelay=1000*lines.length+2000;
   statLines.forEach((el,i)=>{if(i<lines.length){setTimeout(()=>el.classList.add('visible'),1000*(i+1))}else{setTimeout(()=>{el.classList.add('visible');el.querySelector('.score-slam').classList.add('visible')},scoreDelay)}});
   setTimeout(()=>{restBtn.style.opacity='1';restBtn.style.pointerEvents='auto'},scoreDelay+800)}
-function resetGame(){stopEngineSounds();gameOverOverlay.classList.remove('active');upgradeOverlay.classList.remove('active');winOverlay.classList.remove('active');pauseOverlay.classList.remove('active');manualPause=false;bossAlertEl.style.opacity='0';enemies.length=0;bosses.length=0;bombers.length=0;crabs.length=0;bombs.length=0;bombBlasts.length=0;for(const bh of blackHoles)stopBHSound(bh);blackHoles.length=0;projectiles.length=0;enemyProjectiles.length=0;missiles.length=0;missileQueue.length=0;enemyMissiles.length=0;particles.length=0;lifeTokens.length=0;pulseWaves.length=0;fireballs.length=0;bossDebris.length=0;finalBoss=null;finalBossPhase=false;upgrades.handling=0;upgrades.health=0;upgrades.shields=0;upgrades.speed=0;upgrades.missile=0;upgrades.pulse=0;upgrades.multishot=0;kills=0;deaths=0;lives=6;playerLevel=1;playerXp=0;killsEl.textContent='0';livesElHud.textContent='6';lvlNumEl.textContent='1';xpBarEl.style.width='0%';lastSpawnTier=0;lastBossTier=0;lastBomberKill=0;lastCrabKill=0;crabSpawnTimer=420;lastFireballTier=0;lastBHTier=0;enemySpawnInterval=ENEMY_SPAWN_BASE;enemySpawnTimer=ENEMY_SPAWN_BASE;ship.x=0;ship.y=-160;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.respawnTimer=0;ship.hp=0;ship.shieldActive=false;ship.shieldTimer=0;missileCooldown=0;pulseCooldown=0;fireTimer=0;mouse.down=false;  dogfightTriggered=[false,false,false];bonusHealth=0;hasAutoTurret=false;autoTurretTimer=0;autoTurretQueue.length=0;hasLittleDog=false;littleDogTimer=0;littleDogMissiles.length=0;fbTokenTimer=0;sessionStorage.removeItem('orbitalState');sessionStorage.removeItem('dogfightResult');gamePaused=false;updateScoreDisplay();startCountdown()}
+function resetGame(){stopEngineSounds();gameOverOverlay.classList.remove('active');upgradeOverlay.classList.remove('active');winOverlay.classList.remove('active');pauseOverlay.classList.remove('active');manualPause=false;bossAlertEl.style.opacity='0';enemies.length=0;bosses.length=0;bombers.length=0;crabs.length=0;bombs.length=0;bombBlasts.length=0;for(const bh of blackHoles)stopBHSound(bh);blackHoles.length=0;projectiles.length=0;enemyProjectiles.length=0;missiles.length=0;missileQueue.length=0;enemyMissiles.length=0;particles.length=0;lifeTokens.length=0;pulseWaves.length=0;fireballs.length=0;bossDebris.length=0;finalBoss=null;finalBossPhase=false;upgrades.handling=0;upgrades.health=0;upgrades.shields=0;upgrades.speed=0;upgrades.missile=0;upgrades.pulse=0;upgrades.multishot=0;kills=0;deaths=0;lives=6;playerLevel=1;playerXp=0;killsEl.textContent='0';livesElHud.textContent='6';lvlNumEl.textContent='1';xpBarEl.style.width='0%';lastSpawnTier=0;lastBossTier=0;lastBomberKill=0;lastCrabKill=0;crabSpawnTimer=420;lastFireballTier=0;lastBHTier=0;enemySpawnInterval=ENEMY_SPAWN_BASE;enemySpawnTimer=ENEMY_SPAWN_BASE;ship.x=0;ship.y=-160;ship.vx=0;ship.vy=0;ship.alive=true;ship.invuln=INVULN_FRAMES;ship.respawnTimer=0;ship.hp=0;ship.shieldActive=false;ship.shieldTimer=0;missileCooldown=0;pulseCooldown=0;fireTimer=0;mouse.down=false;  dogfightTriggered=[false,false,false];bonusHealth=0;hasAutoTurret=false;autoTurretTimer=0;autoTurretQueue.length=0;hasLittleDog=false;littleDogTimer=0;littleDogMissiles.length=0;fbTokenTimer=0;sessionStorage.removeItem('orbitalState');sessionStorage.removeItem('dogfightResult');sessionStorage.removeItem('orbitalMusicTime');gamePaused=false;updateScoreDisplay();initBgMusic(0);startCountdown()}
 
 function drawRespawnText(){if(ship.alive||lives<=0)return;const progress=1-ship.respawnTimer/RESPAWN_FRAMES;ctx.save();ctx.fillStyle=`rgba(255,255,255,${0.4+Math.sin(Date.now()*0.008)*0.2})`;ctx.font='16px monospace';ctx.textAlign='center';ctx.fillText('RESPAWNING...',canvas.width/2,canvas.height/2+60);const bw=120,bx=canvas.width/2-bw/2,by=canvas.height/2+72;ctx.fillStyle='rgba(255,255,255,0.15)';ctx.fillRect(bx,by,bw,4);ctx.fillStyle='rgba(100,200,255,0.7)';ctx.fillRect(bx,by,bw*progress,4);ctx.restore()}
 
 /* ===== DEPLOY COUNTDOWN ===== */
-let countdownActive=false,countdownStart=0,countdownDuration=5;
-function startCountdown(){countdownActive=true;countdownStart=performance.now();gamePaused=true}
+let countdownActive=false,countdownStart=0,countdownDuration=5,countdownLabel='DEPLOYING IN';
+function startCountdown(){countdownActive=true;countdownStart=performance.now();countdownDuration=5;countdownLabel='DEPLOYING IN';gamePaused=true}
+function startRedeployCountdown(){countdownActive=true;countdownStart=performance.now();countdownDuration=3;countdownLabel='REDEPLOYING';gamePaused=true}
 function drawCountdown(now){
   const elapsed=(now-countdownStart)/1000;
   const remaining=Math.ceil(countdownDuration-elapsed);
@@ -609,10 +640,10 @@ function drawCountdown(now){
   ctx.textAlign='center';ctx.textBaseline='middle';
   /* Position below the sun (world 0,0) converted to screen coords */
   const cx=-camera.x+canvas.width/2,sunBot=-camera.y+canvas.height/2+80;
-  /* "DEPLOYING IN" label */
+  /* label */
   ctx.font='bold 28px monospace';
   ctx.fillStyle=`rgba(255,60,60,${0.5+alpha*0.3})`;
-  ctx.fillText('DEPLOYING IN',cx,sunBot);
+  ctx.fillText(countdownLabel,cx,sunBot);
   /* number */
   ctx.font=`bold ${Math.round(90*numScale)}px monospace`;
   ctx.fillStyle=`rgba(255,40,40,${alpha*0.9})`;
@@ -722,16 +753,28 @@ function animate(now){
     }
     ctx.restore();
   }
-  if(countdownActive)drawCountdown(now);
+  if(!_audioReady){drawLoadingText()}else if(countdownActive){drawCountdown(now)}
   requestAnimationFrame(animate)}
+function drawLoadingText(){
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  const cx=-camera.x+canvas.width/2,sunBot=-camera.y+canvas.height/2+80;
+  const pulse=0.5+Math.sin(Date.now()*0.004)*0.3;
+  ctx.font='bold 20px monospace';ctx.fillStyle=`rgba(255,255,255,${pulse})`;
+  ctx.fillText('LOADING...',cx,sunBot);ctx.restore();
+}
 
 /* ===== RESTORE STATE FROM DOGFIGHT ===== */
+gamePaused=true;
+let _pendingCountdown;
 if(loadGameState()){
   ship.invuln=INVULN_FRAMES;
   spawnLevelUpEffect();
+  _pendingCountdown=startRedeployCountdown;
 }else{
-  startCountdown();
+  _pendingCountdown=startCountdown;
 }
+_onAudioReady=function(){initBgMusic();_pendingCountdown()};
+if(_audioReady)_onAudioReady();
 
 animate(0);
 </script>
