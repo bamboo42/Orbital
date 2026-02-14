@@ -134,7 +134,8 @@ const CFG=TIER_CFG[TIER]||TIER_CFG[0];
 const MAX_SPEED_BASE=5,ACCEL_BASE=MAX_SPEED_BASE/30,FRICTION_BASE=MAX_SPEED_BASE/30;
 const INVULN_FRAMES=180,DAMAGE_INVULN=30;
 const MISSILE_CD_BASE=360,PULSE_CD_BASE=960,PULSE_RADIUS=250,PULSE_EXPAND_FRAMES=30;
-const PROJ_SPEED=9,PROJ_LIFE=120,FIRE_INTERVAL=15,MULTI_SPREAD=0.06;
+const PROJ_SPEED=9,PROJ_LIFE=120,MULTI_SPREAD=0.06;
+const BURST_INTERVAL=24,BURST_COUNT=3,BURST_SHOT_DELAY=4;
 const P_MISSILE_SPEED=4,P_MISSILE_MAX=7,P_MISSILE_TURN=0.06,P_MISSILE_LIFE=300;
 const MISSILE_STAGGER=6;
 function getMaxSpeed(){return MAX_SPEED_BASE*(1+up.speed*0.15)}
@@ -178,7 +179,7 @@ ship.x=canvas.width/2;ship.y=canvas.height*0.75;
 
 const keys={up:false,down:false,left:false,right:false};
 const mouse={x:canvas.width/2,y:0,down:false};
-let fireTimer=0,missileCd=0,pulseCd=0;
+let burstCooldown=0;const burstQueue=[];let missileCd=0,pulseCd=0;
 
 /* ===== PLAYER PROJECTILES ===== */
 const projs=[];
@@ -257,7 +258,7 @@ let introTimer=180;const INTRO_TOTAL=180;
 window.addEventListener('keydown',e=>{if(gameOver||ending)return;if(e.code==='KeyW')keys.up=true;if(e.code==='KeyS')keys.down=true;if(e.code==='KeyA')keys.left=true;if(e.code==='KeyD')keys.right=true;if(e.code==='Space'){e.preventDefault();activatePulse()}});
 window.addEventListener('keyup',e=>{if(e.code==='KeyW')keys.up=false;if(e.code==='KeyS')keys.down=false;if(e.code==='KeyA')keys.left=false;if(e.code==='KeyD')keys.right=false});
 window.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
-window.addEventListener('mousedown',e=>{if(gameOver||ending)return;if(e.button===0){mouse.down=true;fireTimer=0}if(e.button===2&&ship.alive)fireMissile()});
+window.addEventListener('mousedown',e=>{if(gameOver||ending)return;if(e.button===0){mouse.down=true;mouse.justPressed=true}if(e.button===2&&ship.alive)fireMissile()});
 window.addEventListener('mouseup',e=>{if(e.button===0)mouse.down=false});
 window.addEventListener('contextmenu',e=>e.preventDefault());
 
@@ -376,10 +377,11 @@ function updateShip(){
 
 /* ===== UPDATE FIRING ===== */
 function updateFiring(){
-  if(fireTimer>0)fireTimer--;if(missileCd>0)missileCd--;if(pulseCd>0)pulseCd--;
+  if(burstCooldown>0)burstCooldown--;if(missileCd>0)missileCd--;if(pulseCd>0)pulseCd--;
+  for(let i=burstQueue.length-1;i>=0;i--){if(burstQueue[i].delay<=0){if(ship.alive)fireProj();burstQueue.splice(i,1)}else{burstQueue[i].delay--}}
   for(let i=missileQueue.length-1;i>=0;i--){missileQueue[i].delay--;if(missileQueue[i].delay<=0){if(ship.alive)spawnPMissile();missileQueue.splice(i,1)}}
   if(!ship.alive||ending)return;
-  if(mouse.down&&fireTimer<=0){fireProj();fireTimer=Math.round(FIRE_INTERVAL*0.7)}
+  if(mouse.down&&burstCooldown<=0&&burstQueue.length===0){for(let i=0;i<BURST_COUNT;i++)burstQueue.push({delay:i*BURST_SHOT_DELAY});burstCooldown=BURST_INTERVAL;mouse.justPressed=false}
 }
 
 /* ===== UPDATE ENEMY ===== */
